@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="ja"><head>
 <meta charset="UTF-8">
-<title>STG Mobile+PC</title>
+<title>STG TapShot</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -15,11 +15,12 @@ const cv=document.getElementById("game"),ctx=cv.getContext("2d");
 function resize(){cv.width=innerWidth;cv.height=innerHeight;}resize();onresize=resize;
 
 const W=400,H=600;
-let touchX=null,touchShoot=false;
+let touches=[],shooting=false;
+let shotCooldown=0;  // ★ ショット間隔
 
-cv.addEventListener("touchstart",e=>{touchX=e.touches[0].clientX;touchShoot=true;});
-cv.addEventListener("touchmove",e=>{touchX=e.touches[0].clientX;});
-cv.addEventListener("touchend",()=>{touchX=null;touchShoot=false;});
+cv.addEventListener("touchstart",e=>{touches=e.touches;});
+cv.addEventListener("touchmove",e=>{touches=e.touches;});
+cv.addEventListener("touchend",e=>{touches=e.touches;});
 
 let score=0,gameOver=false,gameClear=false,gameComplete=false;
 let clearFlash=0,clearTextAlpha=0,clearWait=0,bgY=0;
@@ -28,7 +29,7 @@ const player={x:200,y:520,speed:5};
 const options=[],bullets=[],bells=[],enemies=[];
 let boss=null,bossBullets=[],bossFlash=0;
 
-let left=false,right=false,space=false,canShoot=true,threeWay=false;
+let left=false,right=false,space=false,threeWay=false;
 
 document.onkeydown=e=>{
   if(e.key==="ArrowLeft")left=true;
@@ -38,11 +39,10 @@ document.onkeydown=e=>{
 document.onkeyup=e=>{
   if(e.key==="ArrowLeft")left=false;
   if(e.key==="ArrowRight")right=false;
-  if(e.code==="Space"){space=false;canShoot=true;}
+  if(e.code==="Space")space=false;
 };
 
 function shoot(){
-  if((!space&&!touchShoot)||!canShoot)return;
   const add=(x,y,vx,vy)=>bullets.push({x,y,vx,vy});
   add(player.x,player.y-10,0,-8);
   if(threeWay){add(player.x,player.y-10,-2,-8);add(player.x,player.y-10,2,-8);}
@@ -50,7 +50,6 @@ function shoot(){
     add(op.x,op.y-10,0,-8);
     if(threeWay){add(op.x,op.y-10,-2,-8);add(op.x,op.y-10,2,-8);}
   });
-  canShoot=false;
 }
 
 let bellTimer=0;
@@ -65,7 +64,28 @@ function completeGame(){gameComplete=true;gameClear=false;}
 
 function update(){
 
-  if(touchX!==null) player.x += (touchX - cv.width/2)*0.05;
+  // ★ 1本指：直接追従
+  if(touches.length>=1){
+    const t=touches[0];
+    const scale=Math.min(cv.width/W,cv.height/H);
+    const offX=(cv.width-W*scale)/2;
+    const offY=(cv.height-H*scale)/2;
+    player.x=(t.clientX-offX)/scale;
+    player.y=(t.clientY-offY)/scale;
+  }
+
+  // ★ 2本指：ショットON
+  shooting = (touches.length>=2 || space);
+
+  // ★ ショット間隔処理
+  if(shotCooldown>0) shotCooldown--;
+
+  // PC操作
+  if(left)player.x-=player.speed;
+  if(right)player.x+=player.speed;
+
+  player.x=Math.max(20,Math.min(380,player.x));
+  player.y=Math.max(40,Math.min(580,player.y));
 
   if(gameClear){
     if(clearFlash<30)clearFlash++;
@@ -82,16 +102,17 @@ function update(){
 
   bgY+=2;if(bgY>H)bgY=0;
 
-  if(left)player.x-=player.speed;
-  if(right)player.x+=player.speed;
-  player.x=Math.max(20,Math.min(380,player.x));
-
   options.forEach(op=>{
     op.x+=(player.x+op.offset-op.x)*0.2;
     op.y+=(player.y-20-op.y)*0.2;
   });
 
-  shoot();
+  // ★ ショット間隔 15
+  if(shooting && shotCooldown===0){
+    shoot();
+    shotCooldown=15;
+  }
+
   for(let i=bullets.length-1;i>=0;i--){
     bullets[i].x+=bullets[i].vx;
     bullets[i].y+=bullets[i].vy;
@@ -195,7 +216,6 @@ function update(){
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
 
-  // ★ PCでもスマホでも内部400×600を中央に固定
   const scale=Math.min(cv.width/W,cv.height/H);
   const offX=(cv.width-W*scale)/2;
   const offY=(cv.height-H*scale)/2;
